@@ -1,10 +1,8 @@
-import datetime
+import github
 
-TARGET_YEAR = datetime.date.today().year
-LICENSE_PREFIX = \
-"""MIT License
+from github import Github
 
-Copyright (c) """
+from config import *
 
 def update_license(lic: str, repo_name: str, target: int = TARGET_YEAR) -> str:
     real_lic = lic.removeprefix(LICENSE_PREFIX)
@@ -28,3 +26,29 @@ def update_license(lic: str, repo_name: str, target: int = TARGET_YEAR) -> str:
             return f"{LICENSE_PREFIX}{years[0]}-{target}{license_suffix}"
         print(f"Invalid year format \"{year}\" in {repo_name}")
         return
+
+def main():
+    gh = Github(GITHUB_ACCESS_TOKEN)
+
+    for repo in gh.get_user().get_repos():
+        try:
+            file = repo.get_contents("LICENSE")
+            lic = file.decoded_content.decode().replace('\r\n', '\n')
+            if not lic.startswith(LICENSE_PREFIX):
+                print(f"{repo.full_name} has wrong license format. Skipping")
+                continue
+            new_lic = update_license(lic, repo.full_name)
+            if new_lic is None:
+                print(f"{repo.full_name} wasn't processed successfully. Skipping")
+                continue
+            try:
+                repo.update_file(file.path, COMMIT_MESSAGE, new_lic, file.sha)
+            except Exception:
+                print(f"{repo.full_name}, failed to commit changes.")    
+            print(f"{repo.full_name} was processed successfully.")
+        except github.UnknownObjectException: # File not found
+            print(f"{repo.full_name} doesn't have a file called \"LICENSE\". Skipping")
+
+
+if __name__ == "__main__":
+    main()
